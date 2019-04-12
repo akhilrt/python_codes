@@ -1,0 +1,245 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Apr  9 14:28:56 2019
+
+@author: I697288
+"""
+
+#changing the current working directory
+import os 
+os.chdir(r'H:\kaggle\Santander Customer Transaction Prediction')
+
+#importing the libraries
+import pandas as pd
+import numpy as np
+import sklearn
+from sklearn.linear_model import LogisticRegression
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+#Importing the training examples
+train = pd.read_csv('train.csv', header = 0)
+test = pd.read_csv('test.csv', header =0)
+
+ls = [52,102,152,202]
+for n in ls:
+    train.iloc[:,(n-50):n].hist()
+    plt.savefig('histplot'+ str(n-50) + '_' + str(n) + '.jpg')
+    
+
+s.hist()
+plt.savefig('path/to/figure.pdf')
+str(10-50)
+
+#basic stats
+train_desc = train.describe()
+train.boxplot()
+train.groupby('target').hist()
+corr = train.corr()
+
+
+
+#checking the target to see if the dataset is imbalanced
+train.groupby('target').count()['ID_code'] #clear imbalance - 90% have 0 as target and 10 has one as target
+
+             
+#There is a lot of bias here - Why not use boosting techniques
+#Trying Xgboost
+from sklearn.model_selection import train_test_split
+x_train, x_test, y_train, y_test = train_test_split(X, y, test_size = 0.25, random_state = 0)
+
+import xgboost as xgb
+from xgboost import XGBClassifier
+XGB = XGBClassifier()
+XGB.fit(x_train, y_train)
+print(XGB)
+
+from sklearn.metrics import accuracy_score
+XGB_prediction = XGB.predict(x_test)
+XGB_accuracy = accuracy_score(y_test, XGB_prediction)
+print("XGB Accuracy: %.2f%%" % (XGB_accuracy*100))
+
+
+from sklearn import metrics
+cm = metrics.confusion_matrix(y_test, XGB_prediction)
+print(cm)
+#visualising confusion matrix
+plt.figure(figsize=(9,9))
+sns.heatmap(cm, annot=True, fmt=".3f", linewidths=.5, square = True, cmap = 'Blues_r', cbar = False);
+plt.ylabel('Actual label');
+plt.xlabel('Predicted label');
+all_sample_title = 'Accuracy Score: {0}'.format(score)
+plt.title(all_sample_title, size = 15);
+         
+
+
+#True Code from here 
+import xgboost as xgb   
+from xgboost import XGBClassifier
+from xgboost.sklearn import XGBClassifier
+from sklearn import cross_validation, metrics   #Additional scklearn functions
+from sklearn.grid_search import GridSearchCV   #Perforimg grid search
+import matplotlib.pylab as plt
+
+def modelfit(alg, dtrain, predictors,useTrainCV=True, cv_folds=5, early_stopping_rounds=50):
+    
+    if useTrainCV:
+        xgb_param = alg.get_xgb_params()
+        xgtrain = xgb.DMatrix(dtrain[predictors].values, label=dtrain["target"].values)
+        cvresult = xgb.cv(xgb_param, xgtrain, num_boost_round=alg.get_params()['n_estimators'], nfold=cv_folds,
+            metrics='auc', early_stopping_rounds=early_stopping_rounds)
+        alg.set_params(n_estimators=cvresult.shape[0])
+    
+    #Fit the algorithm on the data
+    alg.fit(dtrain[predictors], dtrain['target'],eval_metric='auc')
+        
+    #Predict training set:
+    dtrain_predictions = alg.predict(dtrain[predictors])
+    dtrain_predprob = alg.predict_proba(dtrain[predictors])[:,1]
+        
+    #Print model report:
+    print ("\nModel Report")
+    print ("Accuracy : %.4g" % metrics.accuracy_score(dtrain['target'].values, dtrain_predictions))
+    print ("AUC Score (Train): %f" % metrics.roc_auc_score(dtrain['target'], dtrain_predprob))
+    print("Best Iteration: {}".format(alg._Booster.best_iteration))
+                    
+    feat_imp = pd.Series(alg._Booster.get_fscore()).sort_values(ascending=False)
+    feat_imp.plot(kind='bar', title='Feature Importances')
+    plt.ylabel('Feature Importance Score')
+
+predictors = [x for x in train.columns if x not in ["ID_code", "target"]]    
+"""Initial values for everything - This would give a good number for # of estimators since we are using a good learning rate of 0.1 here"""
+xgb1 = XGBClassifier(learning_rate = 0.1, n_estimators = 1000, max_depth = 5, min_child_weight = 1, gamma = 0, 
+                     subsample = 0.8, colsample_bytree = 0.8, objective = 'binary:logistic', nthread = 4, scale_pos_weight = 1, seed = 27)
+modelfit(xgb1, train, predictors)
+
+
+
+Model Report - Learning rate 0.3
+Accuracy : 0.9591
+AUC Score (Train): 0.975380
+Best Iteration: 237
+
+"""Best # of iterations is 237 but this can differ with the learning rate. Lets go with 237 for now 
+For learning rate 0.1 the best number of iterations seems to be 801 - Let's go with 801 since we will be using value less than 0.1 in our final model"""
+Model Report - Learning rate 0.1
+Accuracy : 0.9648
+AUC Score (Train): 0.985655
+Best Iteration: 801
+
+
+
+"""Feature importance score good a give insight. But let's try Recursive feature elimation using cross validation"""
+from sklearn.grid_search import GridSearchCV
+from sklearn.feature_selection import RFECV
+from sklearn.linear_model import LogisticRegression
+#creating log reg estomator
+logreg = LogisticRegression()
+#Defining rfecv to get the best features
+rfecv = RFECV(estimator=logreg, scoring = 'accuracy') #For integer/None inputs, if y is binary or multiclass, sklearn.model_selection.StratifiedKFold is used.
+#Fitting the featues to y
+rfecv.fit(train[predictors], train['target'])
+print("Optimal number of features : %d" % rfecv.n_features_)
+# Plot number of features VS. cross-validation scores
+plt.figure()
+plt.xlabel("Number of features selected")
+plt.ylabel("Cross validation score (nb of correct classifications)")
+plt.plot(range(1, len(rfecv.grid_scores_) + 1), rfecv.grid_scores_)
+plt.show()
+b = pd.DataFrame(rfecv.ranking_, predictors).reset_index()
+b['grid_scores'] = rfecv.grid_scores_
+"""RFECV has just eliminated 12 features. Try a different selection method"""
+
+ 
+#Trying out stability selection
+from sklearn.linear_model import RandomizedLogisticRegression
+randomized_logistic = RandomizedLogisticRegression() 
+randomized_logistic.fit(train[predictors], train['target'])
+print ("Features sorted by their score:")
+print (sorted(zip(map(lambda x: round(x, 4), randomized_logistic.scores_), predictors), reverse=True))
+logreg_scores = pd.DataFrame(sorted(zip(map(lambda x: round(x, 4), randomized_logistic.scores_), predictors), reverse=True))
+logreg_scores.columns = ['score', 'feature']
+
+"""Using the stability selection as our feature selection tool - Taking a score of 0.90 as cutoff. Since in stability selection least important features will also get a 
+score. Most important features will get 1. This is just an intuition to go with 0.90"""
+features_selected = logreg_scores[logreg_scores['score'] >= 0.90]['feature']
+
+
+"""Setting the parameters for max_depth and min_child_weight - This has tremendous effect of the model. So tuning them
+Min Child weight 1 will obviously overfit our model and the results show that there is high accuracy. But if we test we will see the results to be overfitted
+usinf best number of iterations as 801 - The previous result
+"""
+p_test = {'max_depth': np.arange(3,10,2), 'min_child_weight': np.arange(1,6,2)}
+gsearch1 = GridSearchCV(estimator = XGBClassifier(learning_rate = 0.3, n_estimators = 237, max_depth = 5, min_child_weight = 1, gamma = 0,
+                                                  subsample = 0.8, colsample_bytree = 0.8, objective = 'binary:logistic', n_thread = 4, scale_pos_weight =1,
+                                                  seed = 27), param_grid = p_test, scoring = 'roc_auc', n_jobs = 4, iid=False, cv=5)
+#Standardizing the features since the grid search is taking a long time
+from sklearn import preprocessing
+train_pp = preprocessing.scale(train[features_selected])
+gsearch1.fit(train_pp, train["target"])
+#gsearch1.fit(train_pp[:10000,:], train["target"][:10000])
+gsearch1.grid_scores_, gsearch1.best_estimator_, gsearch1.best_params_, gsearch1.best_score_
+
+train["target"][:10000].value_counts()
+"""Grid Search is taking a lot of time to train - Trying to tune with  hyperopt"""
+
+
+
+#useTrainCV=True
+#cv_folds=5
+#early_stopping_rounds=50          
+#alg = XGBClassifier(learning_rate = 0.3, n_estimators = 10, max_depth = 3, min_child_weight = 1, gamma = 0, 
+#                     subsample = 0.8, colsample_bytree = 0.8, objective = 'binary:logistic', nthread = 4, scale_pos_weight = 1, seed = 27)
+#xgb_param = alg.get_xgb_params()
+#xgtrain = xgb.DMatrix(train[predictors].values, label=train["target"].values)
+#cvresult = xgb.cv(xgb_param, xgtrain, num_boost_round=alg.get_params()['n_estimators'], nfold=cv_folds, metrics='auc', early_stopping_rounds=early_stopping_rounds)
+#alg.set_params(n_estimators=cvresult.shape[0])
+#
+##Fit the algorithm on the data
+#alg.fit(train[predictors], train['target'],eval_metric='auc')
+#
+##Predict training set:
+#dtrain_predictions = alg.predict(train[predictors])
+#dtrain_predprob = alg.predict_proba(train[predictors])[:,1]
+#
+##Print model report:
+#print ("\nModel Report")
+#print ("Accuracy : %.4g" % metrics.accuracy_score(train['target'].values, dtrain_predictions))
+#print ("AUC Score (Train): %f" % metrics.roc_auc_score(train['target'], dtrain_predprob))
+#
+#
+#xgboost.plot_importance(alg._Booster)
+#feat_imp = pd.Series(alg._Booster.get_fscore()).sort_values(ascending=False)
+#feat_imp.plot(kind='bar', title='Feature Importances')
+#plt.ylabel('Feature Importance Score')
+
+"""The model had very high AUC and seems like the model is overfitting
+Let's do the feature selection
+Using Recursive feature elimination with cross validation from sklearn"""
+import matplotlib.pyplot as plt
+from sklearn.svm import SVC
+from sklearn.model_selection import StratifiedKFold
+from sklearn.feature_selection import RFECV
+from sklearn.datasets import make_classification
+
+# Build a classification task using 3 informative features
+X, y = make_classification(n_samples=1000, n_features=25, n_informative=3,
+                           n_redundant=2, n_repeated=0, n_classes=8,
+                           n_clusters_per_class=1, random_state=0)
+
+# Create the RFE object and compute a cross-validated score.
+svc = SVC(kernel="linear")
+# The "accuracy" scoring is proportional to the number of correct
+# classifications
+rfecv = RFECV(estimator=svc, step=1, cv=StratifiedKFold(2),
+              scoring='accuracy')
+rfecv.fit(X, y)
+
+print("Optimal number of features : %d" % rfecv.n_features_)
+
+# Plot number of features VS. cross-validation scores
+plt.figure()
+plt.xlabel("Number of features selected")
+plt.ylabel("Cross validation score (nb of correct classifications)")
+plt.plot(range(1, len(rfecv.grid_scores_) + 1), rfecv.grid_scores_)
+plt.show()
