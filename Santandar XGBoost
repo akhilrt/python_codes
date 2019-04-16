@@ -2,7 +2,7 @@
 """
 Created on Tue Apr  9 14:28:56 2019
 
-@author: I697288
+@author: Akhil Reddy Thirumuru
 """
 
 #changing the current working directory
@@ -42,6 +42,12 @@ corr = train.corr()
 #checking the target to see if the dataset is imbalanced
 train.groupby('target').count()['ID_code'] #clear imbalance - 90% have 0 as target and 10 has one as target
 
+# Checking the skew 
+predictors = [x for x in train.columns if x not in ["ID_code", "target"]] 
+skewed_feats = train[predictors].apply(lambda x: skew(x.dropna()))
+print("\nSkew in numeric features:")
+print(skewed_feats)
+"""There seems to be very less skew. The coefficients in all cases are less than 0.35"""
              
 #There is a lot of bias here - Why not use boosting techniques
 #Trying Xgboost
@@ -73,7 +79,7 @@ plt.title(all_sample_title, size = 15);
          
 
 
-#True Code from here 
+#XGBoost implementation - Actual Code from here 
 import xgboost as xgb   
 from xgboost import XGBClassifier
 from xgboost.sklearn import XGBClassifier
