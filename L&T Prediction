@@ -1,14 +1,14 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Apr 17 13:57:10 2019
 
-@author: Akhil Reddy Thirumuru
-"""
+
+# ## Changing the current working directory
 
 import os
 os.chdir(r'H:\kaggle\LTFS')
 
-#Importing the required libraries
+
+# ## Importing the required libraries
+
+
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
@@ -18,34 +18,43 @@ from datetime import timedelta
 #from calendar import isleap
 from sklearn.linear_model import LogisticRegression
 
-#importing the training and test sets
+
+# # Importing the training and test sets
+
+
 train = pd.read_csv('train.csv', header = 0)
 test = pd.read_csv('test_bqCt9Pv.csv', header = 0)
 
-#Checking if there is a bias in target variable distribution
+
+# ## Checking if there is a bias in target variable distribution
+# There is 3.5 times as many goods as bad - biased
+
+
 train["loan_default"].value_counts() 
-"""There is 3.5 times as many goods as bad - biased"""
 
-#Data Basics
-head = train.head()
-des = train.describe()
-train.groupby('loan_default').hist()
 
-#Basic charts to see how the data is distributed accross variables - univariate
+# ## Data Basics
+train.head()
+
+
+train.describe()
+
+
+# ## Basic charts to see how the data is distributed
 cols = ['manufacturer_id', 'Employment.Type', 'State_ID', 'Aadhar_flag',
         'PAN_flag', 'VoterID_flag', 'Driving_flag', 'Passport_flag']
 fig = plt.figure()
 plt.title('Count plots by features')
 for i in (range(len(cols))):
-    ax = fig.add_subplot(2,4,i+1)
+    #ax = fig.add_subplot(2,4,i+1)
     sns.countplot(data = train, x = cols[i],  hue = "loan_default")
+    plt.show()
 
 
-"""There are a few features which by themselves are useless. For instance, 
-Date birth - Age of the person
-Disbursal date is there - can construct a feature called time on books which is more relevant"""
-#Feature Engineering
-train.columns
+# ## Feature Engineering
+# There are a few features which by themselves are useless. For instance, 
+# Date birth - Age of the person
+# Disbursal date is there - can construct a feature called time on books which is more relevant
 #Converting date columns to more useful numeric features
 train['Date.of.Birth'] = pd.to_datetime(train['Date.of.Birth'], format='%d-%m-%y')
 train['Age_of_person'] = (datetime.today() - train['Date.of.Birth'])/timedelta(days = 365.25)
@@ -58,13 +67,16 @@ train["CREDIT_HISTORY_LENGTH"] = (train['CREDIT.HISTORY.LENGTH'].str.extract("(\
 train = train.drop(['Date.of.Birth', 'DisbursalDate', 'AVERAGE.ACCT.AGE', 'CREDIT.HISTORY.LENGTH'], axis=1)
 
 
-#Lets look at the categorical columns 'Employment.Type'- and 'PERFORM_CNS.SCORE.DESCRIPTION'
+# ### Lets look at the categorical columns 'Employment.Type'- and 'PERFORM_CNS.SCORE.DESCRIPTION'
 sns.countplot(data = train, x = "Employment.Type",  hue = "loan_default")
 train = pd.concat([train.drop('Employment.Type', axis=1), pd.get_dummies(train['Employment.Type'])], axis=1) #creating dummies and dropping original column
 
+
 sns.countplot(data = train, y = "PERFORM_CNS.SCORE.DESCRIPTION",  hue = "loan_default")
 train["PERFORM_CNS.SCORE.DESCRIPTION"].value_counts()
-"""Lets categorize this into low, medium, high risk and not scored - just intuition"""
+
+
+
 def risksegment(x):
     if (x['PERFORM_CNS.SCORE.DESCRIPTION']) == '':
         return "Missing"
@@ -80,45 +92,56 @@ train["risk_level"] = train.apply(risksegment, axis =1)
 train = train.drop("PERFORM_CNS.SCORE.DESCRIPTION", axis = 1)
 train = pd.concat([train.drop('risk_level', axis=1), pd.get_dummies(train['risk_level'])], axis=1) #creating dummies and dropping original column
 
-#Correlations
+
+# ## Correlations
 corr = train.corr()
 xticks = train.columns
 yticks = train.index
+plt.figure(figsize=(18, 18))
 sns.heatmap(corr, cmap='RdYlGn', linewidth=0.3, annot = True, fmt = ".1f")
 plt.yticks(rotation = 0)
 plt.xticks(rotation = 90)
-"""There are some highly correlated variables. Have to look at each variable and decide which one to keep and which one's to eliminate
-Otherwise we can apply a model evaluate a feature score to remove it- going with the second one."""
+plt.show()
 
-#Applying logistic regression model
+
+# "There are some highly correlated variables. Have to look at each variable and decide which one to keep and which one's to eliminate
+# Otherwise we can apply a model evaluate a feature score to remove it- going with the second one."
+
+# ## Applying Basic logistic Regressions
+
 from sklearn.linear_model import LogisticRegression
 X = train[[x for x in train.columns if x not in ["UniqueID", "loan_default"]]]
 y = train['loan_default']
 logreg = LogisticRegression(random_state=0, solver='lbfgs', multi_class='multinomial').fit(X, y)
-logreg.score(X,y)
-logreg.predict_proba(X) 
-logreg.coef_
-logreg.intercept_
-
+print(logreg.score(X,y))
+#print(logreg.predict_proba(X)) 
+#print(logreg.coef_)
+print(logreg.intercept_)
 print(list(zip(logreg.coef_, train[[x for x in train.columns if x not in ["UniqueID"]]].columns)))
 coef_dict = {}
 for coef, feat in zip(logreg.coef_,train[[x for x in train.columns if x not in ["UniqueID", "loan_default"]]].columns):
     coef_dict[feat] = coef
 
-#Trying out stability selection
+
+# ## Feature Selection
+
+# ### Trying out stability selection
 from sklearn.linear_model import RandomizedLogisticRegression
 randomized_logistic = RandomizedLogisticRegression() 
 predictors = train[[x for x in train.columns if x not in ["UniqueID", "loan_default"]]].columns
 randomized_logistic.fit(train[predictors], train['loan_default'])
 print ("Features sorted by their score:")
-print (sorted(zip(map(lambda x: round(x, 4), randomized_logistic.scores_), predictors), reverse=True))
+#print (sorted(zip(map(lambda x: round(x, 4), randomized_logistic.scores_), predictors), reverse=True))
 logreg_scores = pd.DataFrame(sorted(zip(map(lambda x: round(x, 4), randomized_logistic.scores_), predictors), reverse=True))
 logreg_scores.columns = ['score', 'feature']
+logreg_scores.sort_values('score', ascending=False)
+
 """Looking log_reg scores it the clearly evident that the 22 features with score > 0.675 have more weight on the model
 selecting only those 22"""
 features_selected = logreg_scores[logreg_scores["score"] > 0.65]["feature"]
 
-"""performing another logistic regression with selected features and lets try sampling since the data is biased"""
+
+# ## Performing another logistic regression with selected features and lets try sampling since the data is biased
 X1 = train[features_selected]
 number_records_defualt = len(train[train.loan_default == 1])
 default_indices = np.array(train[train.loan_default == 1].index)
@@ -191,6 +214,7 @@ def printing_Kfold_scores(x_train_data,y_train_data,c_param_range,k):
     return best_c
 best = printing_Kfold_scores(X_train[features_selected],y_train,[0.0001,0.001,0.01,0.1,1,10],10)
 
+
 import matplotlib.pyplot as plt
 # Call the logistic regression model with the best C parameter w/ to recall
 lr = LogisticRegression(C = 0.01, penalty = 'l1')
@@ -216,18 +240,10 @@ plt.ylabel('Actual label');
 plt.xlabel('Predicted label');
 all_sample_title = 'Accuracy Score: {0}'.format(score)
 plt.title(all_sample_title, size = 15);
+plt.show()
 
-         
-         
-         
-         
-         
-"""Step2 feature reduction"""         
-#Selecting features with business sense
-#features_selected2 = ['ltv', 'PRI.OVERDUE.ACCTS', 'PRI.ACTIVE.ACCTS', 'NO.OF_INQUIRIES', 'Months_on_book', 
-#'DELINQUENT.ACCTS.IN.LAST.SIX.MONTHS', 'CREDIT_HISTORY_LENGTH', 'disbursed_amount', 'PRI.CURRENT.BALANCE', 
-#'PRI.NO.OF.ACCTS', 'Medium', 'High', 'Low', 'manufacturer_id', 'branch_id', 'State_ID', 'Self employed', 'Salaried']
-#Feature importance
+
+# ## Step2 feature reduction
 from sklearn.ensemble import ExtraTreesClassifier
 import matplotlib.pyplot as plt
 ETC = ExtraTreesClassifier()
@@ -264,80 +280,15 @@ plt.ylabel('Actual label');
 plt.xlabel('Predicted label');
 all_sample_title = 'Accuracy Score: {0}'.format(score)
 plt.title(all_sample_title, size = 15);
+plt.show()
 
 
+# ### The Accuracy and AUC don't show much improvement. Trying XGBoost
 
+# ## xgboost
 
+# In[58]:
 
-logreg = LogisticRegression(random_state=0, solver='lbfgs', multi_class='multinomial').fit(x_sel_train, y_train)
-logreg.score(x_sel_train,y_train)
-
-predictions = logreg.predict(x_sel_test)
-#Measuring model performace
-score = logreg.score(x_sel_test, y_test)
-print(logreg.score(x_sel_test, y_test)*100) #accuracy for 25% is 78.361 
-
-#report
-from sklearn import metrics
-cr = metrics.classification_report(y_test, predictions) #The report says that the prediction accuracy for 1 is too less 
-
-
-#Confusion matrix
-from sklearn import metrics
-cm = metrics.confusion_matrix(y_test, predictions)
-print(cm)
-#visualising confusion matrix
-plt.figure(figsize=(9,9))
-sns.heatmap(cm, annot=True, fmt=".3f", linewidths=.5, square = True, cmap = 'Blues_r', cbar = False);
-plt.ylabel('Actual label');
-plt.xlabel('Predicted label');
-all_sample_title = 'Accuracy Score: {0}'.format(score)
-plt.title(all_sample_title, size = 15);
-
-         
-#Model selection
-#Model selection
-from sklearn import cross_validation as cv
-from sklearn import tree
-from sklearn import metrics
-from sklearn import ensemble
-from sklearn import linear_model 
-from sklearn import naive_bayes 
-import xgboost as  xgb
-skf = cv.StratifiedKFold(y, n_folds=3, shuffle=True)
-score_metric = 'roc_auc'
-scores = {}
-
-def score_model(model):
-    return cv.cross_val_score(model, X, y, cv=skf, scoring=score_metric)
-
-scores['tree'] = score_model(tree.DecisionTreeClassifier()) 
-scores['extra_tree'] = score_model(ensemble.ExtraTreesClassifier())
-scores['forest'] = score_model(ensemble.RandomForestClassifier())
-scores['ada_boost'] = score_model(ensemble.AdaBoostClassifier())
-scores['bagging'] = score_model(ensemble.BaggingClassifier())
-scores['grad_boost'] = score_model(ensemble.GradientBoostingClassifier())
-scores['ridge'] = score_model(linear_model.RidgeClassifier())
-scores['passive'] = score_model(linear_model.PassiveAggressiveClassifier())
-scores['sgd'] = score_model(linear_model.SGDClassifier())
-scores['gaussian'] = score_model(naive_bayes.GaussianNB())
-scores['xgboost'] = score_model(xgb.XGBClassifier())
-
-#Print the model scores
-model_scores = pd.DataFrame(scores).mean()
-model_scores.sort_values(ascending=False)
-model_scores.to_csv('model_scores.csv', index=False)
-print('Model scores\n{}'.format(model_scores))
-       
-
-
-
-
-
-
-
-
-#xgboost implementation
 import xgboost as xgb   
 from xgboost import XGBClassifier
 from xgboost.sklearn import XGBClassifier
@@ -370,22 +321,12 @@ def modelfit(alg, dtrain, predictors,useTrainCV=True, cv_folds=5, early_stopping
     feat_imp = pd.Series(alg._Booster.get_fscore()).sort_values(ascending=False)
     feat_imp.plot(kind='bar', title='Feature Importances')
     plt.ylabel('Feature Importance Score')
-    
-#    make predictions for test data
-#    y_pred = alg.predict(dtest)
-#    predictions = pd.DataFrame([round(value) for value in y_pred])
-#    return predictions
-
-
 xgb1 = XGBClassifier(learning_rate = 0.1, n_estimators = 349, max_depth = 5, min_child_weight = 1, gamma = 0, 
                      subsample = 0.8, colsample_bytree = 0.8, objective = 'binary:logistic', nthread = 4, scale_pos_weight = 1, seed = 27)
 modelfit(xgb1, train, features_selected)    
 
-#looping xgb for best aoc
-import sys
-old_stdout = sys.stdout
-log_file = open(r"xgboost_diag.txt","w")
-sys.stdout = log_file
+
+# #### looping xgb for best auc
 for i in np.arange(3,10,2):
     for j in np.arange(1,10,2):
         print("max_depth: {}".format(i))
@@ -393,22 +334,10 @@ for i in np.arange(3,10,2):
         xgb_loop = XGBClassifier(learning_rate = 0.1, n_estimators = 349, max_depth = i, min_child_weight = j, gamma = 0, 
                      subsample = 0.8, colsample_bytree = 0.8, objective = 'binary:logistic', nthread = 4, scale_pos_weight = 1, seed = 27)
         modelfit(xgb_loop, train, features_selected2)
-sys.stdout = old_stdout
-log_file.close()   
-
-"""The best parameters are as follows   
-max_depth: 9
-min_child_weight: 1
-Model Report
-Accuracy : 0.7902
-AUC Score (Train): 0.778880
-Best Iteration: 103
-max_depth: 9
-min_child_weight: 3"""
 
 
-#Using the best parameters
-xgb3 = XGBClassifier(learning_rate = 0.1, n_estimators = 349, max_depth = i, min_child_weight = j, gamma = 0, 
+# ## Using the best parameters for xgboost
+xgb3 = XGBClassifier(learning_rate = 0.1, n_estimators = 106, max_depth = 9, min_child_weight = 5, gamma = 0, 
                      subsample = 0.8, colsample_bytree = 0.8, objective = 'binary:logistic', nthread = 4, scale_pos_weight = 1, seed = 27)
 from sklearn.model_selection import train_test_split
 x_train, x_test = train_test_split(train, test_size = 0.25, random_state = 0)
@@ -424,3 +353,4 @@ final_pred1 = final_pred1[["ID_code", "target"]]
 final_pred1.to_csv('predictions.csv')
 final_pred[0].value_counts()
 train["target"].value_counts()  
+
